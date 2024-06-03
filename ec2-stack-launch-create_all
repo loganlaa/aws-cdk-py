@@ -1,0 +1,54 @@
+from aws_cdk import core
+from aws_cdk import aws_ec2 as ec2
+
+class EC2Stack(core.Stack):
+
+    def _init_(self, scope: core.Construct, construct_id: str, **kwargs) -> None:
+        super()._init_(scope, construct_id, **kwargs)
+
+        # Defina a VPC
+        vpc = ec2.Vpc(self, "vpc")
+
+        # Crie uma sub-rede pública
+        public_subnet = vpc.add_subnet(
+            subnet_id="PublicSubnet",
+            cidr_block="10.0.1.0/24",
+            map_public_ip_on_launch=True
+        )
+
+        # Crie uma sub-rede privada
+        private_subnet = vpc.add_subnet(
+            subnet_id="PrivateSubnet",
+            cidr_block="10.0.2.0/24"
+        )
+
+        # Crie um grupo de segurança para permitir SSH e tráfego HTTP/HTTPS
+        security_group = ec2.SecurityGroup(self, "security-group")
+        security_group.add_ingress_rule(
+            ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "SSH access"
+        )
+        security_group.add_ingress_rule(
+            ec2.Peer.any_ipv4(), ec2.Port.tcp(80), "HTTP access"
+        )
+        security_group.add_ingress_rule(
+            ec2.Peer.any_ipv4(), ec2.Port.tcp(443), "HTTPS access"
+        )
+
+        # Crie uma instância EC2
+        instance = ec2.Instance(
+            self, "instance",
+            instance_type=ec2.InstanceType("t2.micro"),
+            machine_image=ec2.MachineImage.generic_linux({
+                "user_data": core.UserData.for_action(
+                    core.Action.INIT, "/etc/yum.repos.d/CentOS-Media.repo",
+                    "content": """[main]
+                    name=CentOS Media
+                    baseurl=http://vault.centos.org/8.4/Packages/
+                    gpgcheck=1
+                    gpgkey=https://vault.centos.org/8.4/Packages/GPG KEY"""
+                )
+            }),
+            vpc=vpc,
+            subnet=public_subnet,
+            security_group=security_group
+        )
